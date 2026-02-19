@@ -1,5 +1,9 @@
 module AURIS
 
-# Write your package code here.
+export RFI
+
+include("RFI/RFI.jl")
+
+using .RFI
 
 end

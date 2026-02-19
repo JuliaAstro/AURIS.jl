@@ -1,0 +1,58 @@
+Bezier!!!
+To do: 
+-Add sliding window version
+
+For Bezier curve fitting call load a dataset, provided examples are: rfi_test.h5, background_test.h5
+
+h5open(file, "r") do f
+                   global vis        = read(f["/vis"])           
+                   global freqs_hz   = read(f["/freqs_hz"])
+                   global times_int  = read(f["/times"]) 
+               end
+
+For a tiled fit call:
+
+rfi_mask, pgood_data, surf_fit = AURIS.RFI.BAPI.flag_tile(vis;
+ surf_iter=20, deg_time=3, deg_freq=3, tiles_time=15, tiles_freq=15, overlap_frac=0.75)
+
+For a sliding window call:
+
+rfi_mask, pgood_data, surf_fit = AURIS.RFI.BAPI.flag_window(vis;
+ surf_iter=20, deg_time=3, deg_freq=3, window_time=8, window_freq=17)
+
+rfi_mask can be applied to vis to remove RFI
+pgood_data is the probability that the data is not RFI
+surf_fit can be plotted to view the actual surface that is produced
+
+
+
+Splines!!!
+To do:
+-Include probabilities for outlier data/RFI
+
+The spline fitting can be done on general surfaces. I noticed simpler surfaces were failing but I
+think I have fixed this. Define some surface
+
+f(x, y) = (x^2 + y^2 < 4) ? sin(20x*y) : sin(2x*y + 10*sin(x + y))
+
+Build it and add some random noise if you want:
+
+begin
+               nx, ny = 50, 50
+               x = range(0.0, 1.0, length=nx)
+               y = range(0.0, 1.0, length=ny)
+               
+               Z = [f(xi, yj) for xi in x, yj in y]
+               Z_noisy = Z .+ 0.05 .* randn(nx, ny)
+end
+
+Alternatively, you can also use the HDF5 example data.
+
+vals = abs.(vis[<bl>,:,:])
+
+where bl is a value from the baseline index, 1-28.
+
+Call the spline fitting function:
+
+Z_kopt = AURIS.RFI.SAPI.fit_bspline_surface_pso(Z_noisy)
+
