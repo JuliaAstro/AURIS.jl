@@ -36,34 +36,28 @@ function pso(f; ndim, nparticles=30, maxiters=40, bounds, ω=0.5, c1=1.5, c2=1.5
 end
 
 ### Knot number loss
-function model_loss(v, Z, ξ, η, p)
+function model_loss(v, Z, ξ, η, p; β=0.01, γ=10.0, robust=true)
     nbx = clamp(round(Int, v[1]), p + 1, 25)
     nby = clamp(round(Int, v[2]), p + 1, 25)
     kx = clamped_knots_inclusive(0.0, 1.0, nbx, p)
     ky = clamped_knots_inclusive(0.0, 1.0, nby, p)
     Bx, By = basis_matrices(kx, ky, p, ξ, η)
-    ### Original
-    #C = fit_bspline_ls(Bx, By, Z)
-    ### Test feature
-    C = fit_bspline_robust(Bx, By, Z)
-    Ẑ = eval_surface(Bx, By, C)
-    rmse = sqrt(mean((Ẑ .- Z) .^ 2))
+    C = robust ? fit_bspline_robust(Bx, By, Z; β=β, γ=γ) : fit_bspline_ls(Bx, By, Z)
+    Z_fit = eval_surface(Bx, By, C)
+    rmse = sqrt(mean((Z_fit .- Z) .^ 2))
     complexity = 1e-3 * nbx * nby
     rmse + complexity
 end
 
 ### Knot positions loss
-function knot_loss(v, Z, ξ, η, p, nbx_opt, nby_opt)
+function knot_loss(v, Z, ξ, η, p, nbx_opt, nby_opt; β=0.01, γ=10.0, robust=true)
     mx = nbx_opt - p - 1
-    my = nby_opt - p - 1
     kx = decode_knots(v[1:mx], nbx_opt, p)
     ky = decode_knots(v[mx+1:end], nby_opt, p)
     Bx, By = basis_matrices(kx, ky, p, ξ, η)
-    ### Original
-    #C = fit_bspline_ls(Bx, By, Z)
-    C = fit_bspline_robust(Bx, By, Z)
-    Ẑ = eval_surface(Bx, By, C)
-    sqrt(mean((Ẑ .- Z) .^ 2))
+    C = robust ? fit_bspline_robust(Bx, By, Z; β=β, γ=γ) : fit_bspline_ls(Bx, By, Z)
+    Z_fit = eval_surface(Bx, By, C)
+    sqrt(mean((Z_fit .- Z) .^ 2))
 end
 
 end

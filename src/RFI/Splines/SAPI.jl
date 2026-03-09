@@ -11,70 +11,79 @@ export fit_bspline_surface_pso
 function fit_bspline_surface_pso(
     Z::AbstractMatrix;
     p::Int=3,
-    knot_bounds=(4.0, 25.0),
     knot_particles=40,
     knot_iters=50,
     knotpos_particles=60,
     knotpos_iters=80,
+    knotpos_restarts::Int=3,
     λ=1e-6,
+    β=0.01,
+    γ=10.0,
+    prob_threshold=0.5,
+    pso_downsample::Int=4,
 )
 
     nx, ny = size(Z)
 
-    x = range(0.0, 1.0, length=nx)
-    y = range(0.0, 1.0, length=ny)
+    ε = eps(Float64)
+    ξ = [clamp(xi, ε, 1 - ε) for xi in range(0.0, 1.0, length=nx)]
+    η = [clamp(yj, ε, 1 - ε) for yj in range(0.0, 1.0, length=ny)]
 
-    ϵ = eps(Float64)
-    ξ = [clamp(xi, ϵ, 1 - ϵ) for xi in x]
-    η = [clamp(yj, ϵ, 1 - ϵ) for yj in y]
+    ds = max(1, pso_downsample)
+    Z_ds = Z[1:ds:end, 1:ds:end]
+    nx_ds, ny_ds = size(Z_ds)
+    ξ_ds = [clamp(xi, ε, 1 - ε) for xi in range(0.0, 1.0, length=nx_ds)]
+    η_ds = [clamp(yj, ε, 1 - ε) for yj in range(0.0, 1.0, length=ny_ds)]
 
-    knot_max = max(p + 1, min(nx, ny) ÷ 2)
+    knot_max = max(p + 1, min(nx, ny) ÷ 4)
 
     best_v, _ = pso(
-        v -> model_loss(v, Z, ξ, η, p),
+        v -> model_loss(v, Z_ds, ξ_ds, η_ds, p; β=β, γ=γ, robust=false),
         ndim=2,
         bounds=(Float64(p + 1), Float64(knot_max)),
         nparticles=knot_particles,
         maxiters=knot_iters
     )
 
-    #nbx_opt = round(Int, best_v[1])
-    #nby_opt = round(Int, best_v[2])
-
     nbx_opt = clamp(round(Int, best_v[1]), p + 1, knot_max)
     nby_opt = clamp(round(Int, best_v[2]), p + 1, knot_max)
 
-    kx = clamped_knots_inclusive(0.0, 1.0, nbx_opt, p)
-    ky = clamped_knots_inclusive(0.0, 1.0, nby_opt, p)
-
-    Bx, By = basis_matrices(kx, ky, p, ξ, η)
-    C = fit_bspline_ls(Bx, By, Z; λ=λ)
-
     ndim_knots = (nbx_opt - p - 1) + (nby_opt - p - 1)
 
-    best_knots, _ = pso(
-        v -> knot_loss(v, Z, ξ, η, p, nbx_opt, nby_opt),
-        ndim=ndim_knots,
-        bounds=(0.0, 1.0),
-        nparticles=knotpos_particles,
-        maxiters=knotpos_iters
-    )
+    best_knots = nothing
+    best_loss = Inf
+    for _ in 1:knotpos_restarts
+        knots, _ = pso(
+            v -> knot_loss(v, Z_ds, ξ_ds, η_ds, p, nbx_opt, nby_opt; β=β, γ=γ, robust=false),
+            ndim=ndim_knots,
+            bounds=(0.0, 1.0),
+            nparticles=knotpos_particles,
+            maxiters=knotpos_iters
+        )
+        loss = knot_loss(knots, Z, ξ, η, p, nbx_opt, nby_opt; β=β, γ=γ, robust=false)
+        if loss < best_loss
+            best_loss = loss
+            best_knots = knots
+        end
+    end
 
     mx = nbx_opt - p - 1
     kx_kopt = decode_knots(best_knots[1:mx], nbx_opt, p)
     ky_kopt = decode_knots(best_knots[mx+1:end], nby_opt, p)
 
     Bx_kopt, By_kopt = basis_matrices(kx_kopt, ky_kopt, p, ξ, η)
-    ### Original
-    #C_kopt = fit_bspline_ls(Bx_kopt, By_kopt, Z; λ=λ)
-    ### Test feature 1/2
-    #C_kopt = fit_bspline_robust(Bx_kopt, By_kopt, Z; λ=λ)
-    ### Test feature 3/4
-    C_kopt, mask = fit_bspline_mask_outliers(Bx_kopt, By_kopt, Z; λ=λ)
+
+    C_robust = fit_bspline_robust(Bx_kopt, By_kopt, Z; λ=λ, β=β, γ=γ)
+
+    C_kopt, mask = fit_bspline_mask_outliers(
+        Bx_kopt, By_kopt, Z;
+        λ=λ, β=β, γ=γ, prob_threshold=prob_threshold,
+        C_init=C_robust
+    )
 
     Z_kopt = eval_surface(Bx_kopt, By_kopt, C_kopt)
 
-    return Z_kopt, mask#, (kx_kopt, ky_kopt), C_kopt
+    return Z_kopt, mask
 end
 
 end

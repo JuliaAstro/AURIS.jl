@@ -163,7 +163,7 @@ function fit_bezier_surface_bayesian_weighted(y::AbstractMatrix{T};
             tail_frac = mean(absr .> 3.0 * σ_eff)
             β_tile = clamp(tail_frac, 0.001, 0.2)
 
-            p_tile = bayesian_prob_good(rvec_tile, σ_eff; β=β_tile, γ=5.0)
+            p_tile = bayesian_prob_good(rvec_tile .- med_r_tile, σ_eff; β=β_tile, γ=5.0)
             p_tile = reshape(p_tile, size(resid_tile))
 
             p_good[ti:ti1, fj:fj1] .+= p_tile
@@ -210,12 +210,13 @@ function fit_bezier_surface_bayesian_weighted(y::AbstractMatrix{T};
         σ_global = 1.4826 * median(abs.(rvec_finite .- med_r)) + eps()
     end
 
-    tail_frac = mean(abs.(rvec) .> 3.0 * σ_global)
+    tail_frac = mean(abs.(rvec_finite .- med_r) .> 3.0 * σ_global)
     β = clamp(tail_frac, β_floor, 0.2)
-    γ = clamp(quantile(abs.(rvec), 0.9) / σ_global, 3.0, 50.0)
+    γ = clamp(quantile(abs.(rvec_finite .- med_r), 0.9) / σ_global, 3.0, 50.0)
 
-    pvals = bayesian_prob_good(rvec, σ_global; β=β, γ=γ)
+    pvals = bayesian_prob_good(rvec .- med_r, σ_global; β=β, γ=γ)
     p_good = reshape(clamp.(pvals, 1e-12, 1.0), nt_pad, nchan_pad)
+    p_good[resid.≤0] .= 1.0
 
     yfit_surface = yfit_surface[global_pad_t+1:end-global_pad_t, global_pad_f+1:end-global_pad_f]
     p_good = p_good[global_pad_t+1:end-global_pad_t, global_pad_f+1:end-global_pad_f]
@@ -292,7 +293,6 @@ function fit_bezier_surface_bayesian_weighted_window(
     yfit = zeros(nt, nf)
     wacc = zeros(nt, nf)
 
-    # initial fit
     for (ti, ti1) in t_windows, (fj, fj1) in f_windows
         tile = ymat[ti:ti1, fj:fj1]
         f = fit_window_local_pad(tile, nothing; deg_time=deg_time, deg_freq=deg_freq)
@@ -302,7 +302,6 @@ function fit_bezier_surface_bayesian_weighted_window(
     yfit ./= max.(wacc, 1)
     prev = copy(yfit)
 
-    # iterative Bayesian refinement
     for iter in 1:maxiter
         resid = ymat .- yfit
         rvec = vec(resid)
@@ -321,7 +320,7 @@ function fit_bezier_surface_bayesian_weighted_window(
             tail_frac = mean(abs.(rv .- medt) .> 3σloc)
             β = clamp(tail_frac, 0.001, 0.2)
 
-            pt = bayesian_prob_good(rv, σloc; β=β, γ=5.0)
+            pt = bayesian_prob_good(rv .- medt, σloc; β=β, γ=5.0)
             p_good[ti:ti1, fj:fj1] .+= reshape(pt, size(rt))
             wcnt[ti:ti1, fj:fj1] .+= 1
         end
@@ -355,12 +354,13 @@ function fit_bezier_surface_bayesian_weighted_window(
     med_r = median(rvec)
     σ = 1.4826 * median(abs.(rvec .- med_r)) + eps()
 
-    tail_frac = mean(abs.(rvec) .> 3σ)
+    tail_frac = mean(abs.(rvec .- med_r) .> 3σ)
     β = clamp(tail_frac, β_floor, 0.2)
-    γ = clamp(quantile(abs.(rvec), 0.9) / σ, 3, 50)
+    γ = clamp(quantile(abs.(rvec .- med_r), 0.9) / σ, 3, 50)
 
-    p = bayesian_prob_good(rvec, σ; β=β, γ=γ)
+    p = bayesian_prob_good(rvec .- med_r, σ; β=β, γ=γ)
     p = reshape(p, nt, nf)
+    p[resid.≤0] .= 1.0
 
     return yfit, p
 end
