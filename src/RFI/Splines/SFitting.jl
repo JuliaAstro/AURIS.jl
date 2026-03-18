@@ -1,122 +1,73 @@
 module SFitting
 
 using LinearAlgebra, Statistics
-using ..BProbability: bayesian_prob_good
+using ..SProbability: prob_good
 
-function fit_bspline_ls(Bx, By, Z; λ=1e-6)
-    A = kron(By, Bx)
-    z = vec(Z)
-    c = (A' * A + λ * I(size(A, 2))) \ (A' * z)
-    reshape(c, size(Bx, 2), size(By, 2))
+export fit_ls, fit_weighted, fit_masked, fit_em, evaluate
+
+function fit_ls(Bx, By, Z; λ=1e-6)
+    nkx, nky = size(Bx, 2), size(By, 2)
+    n = nkx * nky
+    AtA = kron(By' * By, Bx' * Bx)
+    Atz = vec(Bx' * Z * By)
+    c = (AtA + λ * I(n)) \ Atz
+    reshape(c, nkx, nky)
 end
 
-function fit_bspline_ls_weighted(Bx, By, Z, w; λ=1e-6)
-    A = kron(By, Bx)
-    z = vec(Z)
-    wv = vec(w)
+function fit_weighted(Bx, By, Z, w; λ=1e-6)
+    nkx, nky = size(Bx, 2), size(By, 2)
+    n = nkx * nky
+    W = reshape(w, size(Bx, 1), size(By, 1))
 
-    W = Diagonal(wv)
-
-    c = (A' * W * A + λ * I(size(A, 2))) \ (A' * W * z)
-    reshape(c, size(Bx, 2), size(By, 2))
-end
-
-function fit_bspline_robust(Bx, By, Z;
-    λ=1e-6,
-    β=0.01,
-    γ=10.0,
-    maxiters=10,
-    tol=1e-4)
-
-    nx, ny = size(Z)
-    w = ones(nx, ny)
-
-    C = fit_bspline_ls(Bx, By, Z; λ=λ)
-
-    for _ in 1:maxiters
-        Ẑ = eval_surface(Bx, By, C)
-        resid = Z .- Ẑ
-
-        med_r = median(resid)
-        σ = 1.4826 * median(abs.(resid .- med_r))
-
-        w_new = bayesian_prob_good(resid .- med_r, σ; β=β, γ=γ)
-        w_new[resid.≤0] .= 1.0
-
-        C_new = fit_bspline_ls_weighted(Bx, By, Z, w_new; λ=λ)
-
-        if norm(C_new - C) < tol
-            C = C_new
-            break
+    AtWA = zeros(n, n)
+    for j in axes(By, 1)
+        Qj = Bx' * (W[:, j] .* Bx)
+        byj = By[j, :]
+        for d in 1:nky, b in 1:nky
+            ib = (b-1)*nkx+1:b*nkx
+            id = (d-1)*nkx+1:d*nkx
+            @views AtWA[ib, id] .+= (byj[b] * byj[d]) .* Qj
         end
-
-        C = C_new
-        w = w_new
     end
 
-    C
+    AtWz = vec(Bx' * (W .* Z) * By)
+    c = (AtWA + λ * I(n)) \ AtWz
+    reshape(c, nkx, nky)
 end
 
-function fit_bspline_ls_masked(Bx, By, Z, mask; λ=1e-6)
-    A = kron(By, Bx)
-    z = vec(Z)
-    mv = vec(mask)
-
-    A_masked = A[mv, :]
-    z_masked = z[mv]
-
-    c = (A_masked' * A_masked + λ * I(size(A, 2))) \ (A_masked' * z_masked)
-
-    reshape(c, size(Bx, 2), size(By, 2))
+function fit_masked(Bx, By, Z, mask; λ=1e-6)
+    fit_weighted(Bx, By, Z, Float64.(mask); λ=λ)
 end
 
-function fit_bspline_mask_outliers(
+function fit_em(
     Bx, By, Z;
     λ=1e-6,
-    β=0.01,
-    γ=10.0,
-    prob_threshold=0.5,
-    maxiters=10,
-    C_init=nothing
+    β::Float64=0.01,
+    γ::Float64=10.0,
+    maxiters::Int=30,
+    tol=1e-6
 )
-
-    nx, ny = size(Z)
-    mask = trues(nx, ny)
-
-    C = isnothing(C_init) ? fit_bspline_ls(Bx, By, Z; λ=λ) : C_init
-
-    resid_init = vec(Z .- eval_surface(Bx, By, C))
-    med_init = median(resid_init)
-    σ_init = 1.4826 * median(abs.(resid_init .- med_init))
-    tail_frac = mean(abs.(resid_init .- med_init) .> 3.0 * σ_init)
-    β_eff = clamp(tail_frac, β / 10, 0.2)
+    C = fit_ls(Bx, By, Z; λ=λ)
 
     for _ in 1:maxiters
-        Ẑ = eval_surface(Bx, By, C)
+        Ẑ = evaluate(Bx, By, C)
         resid = Z .- Ẑ
+        med_r = median(resid)
+        σ = max(1.4826 * median(abs.(resid .- med_r)), 1e-10)
+        Z_fit_adj = max.(Ẑ .+ med_r, 1e-10)
+        w = prob_good(Z, Z_fit_adj, σ; β=β, γ=γ)
+        w[resid.≤0] .= 1.0
+        C_new = fit_weighted(Bx, By, Z, w; λ=λ)
 
-        resid_in = resid[mask]
-        med_r = median(resid_in)
-        σ = 1.4826 * median(abs.(resid_in .- med_r))
-
-        p_good = bayesian_prob_good(resid .- med_r, σ; β=β_eff, γ=γ)
-        p_good[resid.≤0] .= 1.0
-
-        new_mask = p_good .> prob_threshold
-
-        if new_mask == mask
-            break
-        end
-
-        mask = new_mask
-        C = fit_bspline_ls_masked(Bx, By, Z, mask; λ=λ)
+        Δ = norm(vec(C_new - C))
+        C = C_new
+        Δ < tol * (norm(vec(C)) + 1e-10) && break
     end
 
-    return C, mask
+    return C
 end
 
-
-function eval_surface(Bx, By, C)
+function evaluate(Bx, By, C)
     Bx * C * By'
 end
 

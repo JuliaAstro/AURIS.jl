@@ -216,7 +216,8 @@ function fit_bezier_surface_bayesian_weighted(y::AbstractMatrix{T};
 
     pvals = bayesian_prob_good(rvec .- med_r, σ_global; β=β, γ=γ)
     p_good = reshape(clamp.(pvals, 1e-12, 1.0), nt_pad, nchan_pad)
-    p_good[resid.≤0] .= 1.0
+    # Data below the fitted surface cannot be RFI in visibility amplitudes.
+    p_good[resid .≤ 0] .= 1.0
 
     yfit_surface = yfit_surface[global_pad_t+1:end-global_pad_t, global_pad_f+1:end-global_pad_f]
     p_good = p_good[global_pad_t+1:end-global_pad_t, global_pad_f+1:end-global_pad_f]
@@ -293,6 +294,7 @@ function fit_bezier_surface_bayesian_weighted_window(
     yfit = zeros(nt, nf)
     wacc = zeros(nt, nf)
 
+    # initial fit
     for (ti, ti1) in t_windows, (fj, fj1) in f_windows
         tile = ymat[ti:ti1, fj:fj1]
         f = fit_window_local_pad(tile, nothing; deg_time=deg_time, deg_freq=deg_freq)
@@ -302,6 +304,7 @@ function fit_bezier_surface_bayesian_weighted_window(
     yfit ./= max.(wacc, 1)
     prev = copy(yfit)
 
+    # iterative Bayesian refinement
     for iter in 1:maxiter
         resid = ymat .- yfit
         rvec = vec(resid)
@@ -360,7 +363,8 @@ function fit_bezier_surface_bayesian_weighted_window(
 
     p = bayesian_prob_good(rvec .- med_r, σ; β=β, γ=γ)
     p = reshape(p, nt, nf)
-    p[resid.≤0] .= 1.0
+    # Data below the fitted surface cannot be RFI in visibility amplitudes.
+    p[resid .≤ 0] .= 1.0
 
     return yfit, p
 end

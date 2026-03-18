@@ -1,89 +1,96 @@
 module SAPI
 
-using LinearAlgebra, Statistics, Random
+using LinearAlgebra, Statistics
 
-using ..SBasis: basis_matrices, clamped_knots_inclusive, decode_knots
-using ..SFitting: fit_bspline_ls, eval_surface, fit_bspline_robust, fit_bspline_ls_weighted, fit_bspline_mask_outliers, fit_bspline_ls_masked
-using ..SOptimisation: pso, model_loss, knot_loss
+using ..SBasis: bases, knot_vector
+using ..SFitting: fit_em, fit_masked, evaluate
+using ..SOptimisation: select_knots
+using ..SProbability: prob_good
 
-export fit_bspline_surface_pso
+export fit_surface, apply_flags, SplineFlagBasis
 
-function fit_bspline_surface_pso(
+struct SplineFlagBasis
+    p::Int
+    kx::Vector{Float64}
+    ky::Vector{Float64}
+    C::Matrix{Float64}
+    σ::Float64
+    β::Float64
+    γ::Float64
+    prob_threshold::Float64
+    nx::Int
+    ny::Int
+end
+
+function apply_flags(basis::SplineFlagBasis, Z::AbstractMatrix)
+    @assert size(Z) == (basis.nx, basis.ny) "Z size $(size(Z)) does not match basis ($(basis.nx) × $(basis.ny))"
+    ε = eps(Float64)
+    ξ = [clamp(xi, ε, 1 - ε) for xi in range(0.0, 1.0, length=basis.nx)]
+    η = [clamp(yj, ε, 1 - ε) for yj in range(0.0, 1.0, length=basis.ny)]
+    Bx, By = bases(basis.kx, basis.ky, basis.p, ξ, η)
+    Z_recon = evaluate(Bx, By, basis.C)
+    resid = Z .- Z_recon
+    col_med = median(resid, dims=2)
+    Z_fit_adj = max.(Z_recon .+ col_med, 1e-10)
+    p = prob_good(Z, Z_fit_adj, basis.σ; β=basis.β, γ=basis.γ)
+    p[resid.≤0] .= 1.0
+    return p .> basis.prob_threshold
+end
+
+function fit_surface(
     Z::AbstractMatrix;
     p::Int=3,
-    knot_particles=40,
-    knot_iters=50,
-    knotpos_particles=60,
-    knotpos_iters=80,
-    knotpos_restarts::Int=3,
+    nk_time::Int=0,
+    nk_freq::Int=0,
+    bic_range=nothing,
+    bic_range_freq=nothing,
     λ=1e-6,
-    β=0.01,
-    γ=10.0,
-    prob_threshold=0.5,
-    pso_downsample::Int=4,
+    em_maxiters::Int=30,
+    em_tol=1e-6,
+    β::Float64=0.01,
+    γ::Float64=10.0,
+    prob_threshold::Float64=0.5
 )
-
     nx, ny = size(Z)
-
     ε = eps(Float64)
     ξ = [clamp(xi, ε, 1 - ε) for xi in range(0.0, 1.0, length=nx)]
     η = [clamp(yj, ε, 1 - ε) for yj in range(0.0, 1.0, length=ny)]
 
-    ds = max(1, pso_downsample)
-    Z_ds = Z[1:ds:end, 1:ds:end]
-    nx_ds, ny_ds = size(Z_ds)
-    ξ_ds = [clamp(xi, ε, 1 - ε) for xi in range(0.0, 1.0, length=nx_ds)]
-    η_ds = [clamp(yj, ε, 1 - ε) for yj in range(0.0, 1.0, length=ny_ds)]
-
-    knot_max = max(p + 1, min(nx, ny) ÷ 4)
-
-    best_v, _ = pso(
-        v -> model_loss(v, Z_ds, ξ_ds, η_ds, p; β=β, γ=γ, robust=false),
-        ndim=2,
-        bounds=(Float64(p + 1), Float64(knot_max)),
-        nparticles=knot_particles,
-        maxiters=knot_iters
-    )
-
-    nbx_opt = clamp(round(Int, best_v[1]), p + 1, knot_max)
-    nby_opt = clamp(round(Int, best_v[2]), p + 1, knot_max)
-
-    ndim_knots = (nbx_opt - p - 1) + (nby_opt - p - 1)
-
-    best_knots = nothing
-    best_loss = Inf
-    for _ in 1:knotpos_restarts
-        knots, _ = pso(
-            v -> knot_loss(v, Z_ds, ξ_ds, η_ds, p, nbx_opt, nby_opt; β=β, γ=γ, robust=false),
-            ndim=ndim_knots,
-            bounds=(0.0, 1.0),
-            nparticles=knotpos_particles,
-            maxiters=knotpos_iters
-        )
-        loss = knot_loss(knots, Z, ξ, η, p, nbx_opt, nby_opt; β=β, γ=γ, robust=false)
-        if loss < best_loss
-            best_loss = loss
-            best_knots = knots
-        end
+    # Phase 1a: BIC knot selection
+    if nk_time > 0 && nk_freq > 0
+        nkx, nky = nk_time, nk_freq
+    else
+        bic_nkx, bic_nky = select_knots(Z, ξ, η, p;
+            k_range=bic_range, k_range_freq=bic_range_freq, λ=λ)
+        nkx = nk_time > 0 ? nk_time : bic_nkx
+        nky = nk_freq > 0 ? nk_freq : bic_nky
     end
 
-    mx = nbx_opt - p - 1
-    kx_kopt = decode_knots(best_knots[1:mx], nbx_opt, p)
-    ky_kopt = decode_knots(best_knots[mx+1:end], nby_opt, p)
+    kx = knot_vector(0.0, 1.0, nkx, p)
+    ky = knot_vector(0.0, 1.0, nky, p)
+    Bx, By = bases(kx, ky, p, ξ, η)
 
-    Bx_kopt, By_kopt = basis_matrices(kx_kopt, ky_kopt, p, ξ, η)
+    # Phase 1b: Box & Tiao EM robust fitting
+    C = fit_em(Bx, By, Z; λ=λ, β=β, γ=γ, maxiters=em_maxiters, tol=em_tol)
+    Z_fit = evaluate(Bx, By, C)
 
-    C_robust = fit_bspline_robust(Bx_kopt, By_kopt, Z; λ=λ, β=β, γ=γ)
+    # Phase 2: threshold residuals
+    resid = Z .- Z_fit
+    col_med = median(resid, dims=2)
+    resid_c = resid .- col_med
+    σ = max(1.4826 * median(abs.(resid_c)), 1e-10)
 
-    C_kopt, mask = fit_bspline_mask_outliers(
-        Bx_kopt, By_kopt, Z;
-        λ=λ, β=β, γ=γ, prob_threshold=prob_threshold,
-        C_init=C_robust
-    )
+    Z_fit_adj = max.(Z_fit .+ col_med, 1e-10)
+    pg = prob_good(Z, Z_fit_adj, σ; β=β, γ=γ)
+    pg[resid.≤0] .= 1.0
+    mask = pg .> prob_threshold
 
-    Z_kopt = eval_surface(Bx_kopt, By_kopt, C_kopt)
+    # Phase 3: clean refit on inlier pixels
+    C_clean = fit_masked(Bx, By, Z, mask; λ=λ)
 
-    return Z_kopt, mask
+    basis = SplineFlagBasis(p, kx, ky, C_clean, σ, β, γ, prob_threshold, nx, ny)
+
+    return Z_fit, mask, basis
 end
 
 end

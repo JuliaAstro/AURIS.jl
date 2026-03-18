@@ -6,6 +6,7 @@ include("Bezier/BFitting.jl")
 include("Bezier/BAPI.jl")
 
 include("Splines/SBasis.jl")
+include("Splines/SProbability.jl")
 include("Splines/SFitting.jl")
 include("Splines/SOptimisation.jl")
 include("Splines/SAPI.jl")
@@ -16,6 +17,7 @@ using .BFitting
 using .BAPI
 
 using .SBasis
+using .SProbability
 using .SFitting
 using .SOptimisation
 using .SAPI
