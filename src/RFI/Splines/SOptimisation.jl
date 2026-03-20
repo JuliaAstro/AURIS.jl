@@ -10,13 +10,32 @@ function select_knots(
     ξ::AbstractVector,
     η::AbstractVector,
     p::Int;
+    mask=nothing,
     k_range=nothing,
     k_range_freq=nothing,
     λ=1e-6,
     bic_penalty::Float64=1.0
 )
-    z_t = vec(median(Z, dims=2))
-    z_f = vec(median(Z, dims=1))
+    nx, ny = size(Z)
+    if isnothing(mask)
+        z_t = vec(median(Z, dims=2))
+        z_f = vec(median(Z, dims=1))
+    else
+        z_t = [
+            begin
+                cl = Z[i, mask[i, :]]
+                isempty(cl) ? median(Z[i, :]) : median(cl)
+            end
+            for i in 1:nx
+        ]
+        z_f = [
+            begin
+                cl = Z[mask[:, j], j]
+                isempty(cl) ? median(Z[:, j]) : median(cl)
+            end
+            for j in 1:ny
+        ]
+    end
 
     nkx = bic_1d(z_t, ξ, p; k_range=k_range, λ=λ, freq_axis=false, bic_penalty=bic_penalty)
     nky = bic_1d(z_f, η, p; k_range=k_range_freq, λ=λ, freq_axis=true, bic_penalty=bic_penalty)
@@ -29,7 +48,7 @@ function bic_1d(z, t, p; k_range=nothing, λ=1e-6, freq_axis=false, bic_penalty:
     k_max = if freq_axis
         max(p + 1, min(n ÷ 4, 20))
     else
-        max(p + 1, n ÷ 4)
+        max(p + 1, n - p - 1)
     end
     rng = isnothing(k_range) ? (p+1:2:k_max) : k_range
 

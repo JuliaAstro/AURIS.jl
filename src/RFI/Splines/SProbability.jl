@@ -2,7 +2,7 @@ module SProbability
 
 using Statistics
 
-export prob_good
+export prob_good, fit_beta_gamma
 
 function log_i0(x::Float64)
     if x < 3.75
@@ -49,6 +49,70 @@ function prob_good(
     end
 
     return p
+end
+
+function fit_beta_gamma(
+    Z::AbstractMatrix,
+    Z_fit::AbstractMatrix,
+    σ::Float64,
+    active::AbstractMatrix{Bool};
+    β_range=exp.(range(log(0.001), log(0.5), length=40)),
+    γ_range=exp.(range(log(2.0), log(5000.0), length=40))
+)
+    σ2 = σ^2
+
+    log_fg = Float64[]
+    for idx in eachindex(Z)
+        active[idx] || continue
+        z = Float64(Z[idx])
+        ν = Float64(Z_fit[idx])
+        push!(log_fg, log_i0(z * ν / σ2) - (z^2 + ν^2) / (2.0 * σ2) - 2.0 * log(σ))
+    end
+    isempty(log_fg) && return (β_range[1], γ_range[1])
+
+    best_ll = -Inf
+    β_opt = Float64(first(β_range))
+    γ_opt = Float64(first(γ_range))
+
+    for γ in γ_range
+        γ = Float64(γ)
+        γ2σ2 = (γ * σ)^2
+        log_γσ2 = 2.0 * log(γ * σ)
+
+        log_fb = Float64[]
+        k = 0
+        for idx in eachindex(Z)
+            active[idx] || continue
+            k += 1
+            z = Float64(Z[idx])
+            ν = Float64(Z_fit[idx])
+            push!(log_fb, log_i0(z * ν / γ2σ2) - (z^2 + ν^2) / (2.0 * γ2σ2) - log_γσ2)
+        end
+
+        for β in β_range
+            β = Float64(β)
+            log1mβ = log(1.0 - β)
+            logβ = log(β)
+            ll = 0.0
+            for k in eachindex(log_fg)
+                a = log1mβ + log_fg[k]
+                b = logβ + log_fb[k]
+
+                if a >= b
+                    ll += a + log1p(exp(b - a))
+                else
+                    ll += b + log1p(exp(a - b))
+                end
+            end
+            if ll > best_ll
+                best_ll = ll
+                β_opt = β
+                γ_opt = γ
+            end
+        end
+    end
+
+    return β_opt, γ_opt
 end
 
 end
