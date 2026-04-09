@@ -6,59 +6,49 @@ using LinearAlgebra, Statistics
 export select_knots
 
 function select_knots(
-    Z::AbstractMatrix,
-    ξ::AbstractVector,
-    η::AbstractVector,
-    p::Int;
-    mask=nothing,
-    k_range=nothing,
-    k_range_freq=nothing,
-    λ=1e-6,
-    bic_penalty::Float64=1.0
+    Z               :: AbstractMatrix,
+    ξ               :: AbstractVector,
+    η               :: AbstractVector,
+    p               :: Int;
+    mask                = nothing,
+    k_range             = nothing,
+    k_range_freq        = nothing,
+    λ                   = 1e-6,
+    bic_penalty :: Float64 = 1.0
 )
     nx, ny = size(Z)
     if isnothing(mask)
         z_t = vec(median(Z, dims=2))
         z_f = vec(median(Z, dims=1))
     else
-        z_t = [
-            begin
-                cl = Z[i, mask[i, :]]
-                isempty(cl) ? median(Z[i, :]) : median(cl)
-            end
-            for i in 1:nx
-        ]
-        z_f = [
-            begin
-                cl = Z[mask[:, j], j]
-                isempty(cl) ? median(Z[:, j]) : median(cl)
-            end
-            for j in 1:ny
-        ]
+        z_t = [begin cl = Z[i, mask[i,:]]; isempty(cl) ? median(Z[i,:]) : median(cl) end
+               for i in 1:nx]
+        z_f = [begin cl = Z[mask[:,j], j]; isempty(cl) ? median(Z[:,j]) : median(cl) end
+               for j in 1:ny]
     end
 
-    nkx = bic_1d(z_t, ξ, p; k_range=k_range, λ=λ, freq_axis=false, bic_penalty=bic_penalty)
-    nky = bic_1d(z_f, η, p; k_range=k_range_freq, λ=λ, freq_axis=true, bic_penalty=bic_penalty)
+    nkx = bic_1d(z_t, ξ, p; k_range=k_range,      λ=λ, freq_axis=false, bic_penalty=bic_penalty)
+    nky = bic_1d(z_f, η, p; k_range=k_range_freq,  λ=λ, freq_axis=true,  bic_penalty=bic_penalty)
 
     return nkx, nky
 end
 
 function bic_1d(z, t, p; k_range=nothing, λ=1e-6, freq_axis=false, bic_penalty::Float64=1.0)
-    n = length(z)
+    n     = length(z)
     k_max = if freq_axis
         max(p + 1, min(n ÷ 4, 20))
     else
         max(p + 1, n - p - 1)
     end
-    rng = isnothing(k_range) ? (p+1:2:k_max) : k_range
+    rng   = isnothing(k_range) ? (p + 1 : 2 : k_max) : k_range
 
     best_bic = Inf
-    best_nk = first(rng)
+    best_nk  = first(rng)
 
     for nk in rng
         kv = knot_vector(0.0, 1.0, nk, p)
-        B = [basis(kv, a, p, ti) for ti in t, a in 1:nk]
-        c = (B'B + λ * I(nk)) \ (B'z)
+        B  = [basis(kv, a, p, ti) for ti in t, a in 1:nk]
+        c  = (B'B + λ * I(nk)) \ (B'z)
 
         resid = z .- B * c
         med_r = median(resid)
@@ -68,11 +58,11 @@ function bic_1d(z, t, p; k_range=nothing, λ=1e-6, freq_axis=false, bic_penalty:
         n_in < 5 && continue
 
         rss_in = max(sum(resid[inliers] .^ 2), 1e-30)
-        bic = n_in * log(rss_in / n_in) + bic_penalty * nk * log(n_in)
+        bic    = n_in * log(rss_in / n_in) + bic_penalty * nk * log(n_in)
 
         if bic < best_bic
             best_bic = bic
-            best_nk = nk
+            best_nk  = nk
         end
     end
 
