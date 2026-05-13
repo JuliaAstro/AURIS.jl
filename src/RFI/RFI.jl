@@ -10,6 +10,7 @@ include("Splines/SProbability.jl")
 include("Splines/SFitting.jl")
 include("Splines/SOptimisation.jl")
 include("Splines/SProjection.jl")
+include("Splines/SFourier.jl")
 include("Splines/SAPI.jl")
 
 using .BBasis
@@ -22,6 +23,7 @@ using .SProbability
 using .SFitting
 using .SOptimisation
 using .SProjection
+using .SFourier
 using .SAPI
 
 export BAPI

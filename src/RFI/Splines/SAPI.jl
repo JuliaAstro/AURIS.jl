@@ -7,9 +7,11 @@ using ..SFitting: fit_ls, fit_em, fit_masked, evaluate
 using ..SOptimisation: select_knots
 using ..SProbability: prob_good, fit_beta_gamma
 using ..SProjection: flag_broadband_times, flag_narrowband_freqs
+using ..SFourier: flag_broadband_times_fourier
 
 export fit_surface, apply_flags, SplineFlagBasis,
-       flag_broadband_times, flag_narrowband_freqs
+       flag_broadband_times, flag_narrowband_freqs,
+       flag_broadband_times_fourier, flag_broadband_times_surface
 
 struct SplineFlagBasis
     p             :: Int
@@ -62,7 +64,6 @@ function fit_surface(
     ξ = [clamp(xi, ε, 1 - ε) for xi in range(0.0, 1.0, length=nx)]
     η = [clamp(yj, ε, 1 - ε) for yj in range(0.0, 1.0, length=ny)]
 
-    # Build projection mask: false where projections detected RFI
     proj_mask = trues(nx, ny)
     if !isnothing(bad_times)
         @assert length(bad_times) == nx "bad_times length $(length(bad_times)) ≠ nx=$nx"
@@ -74,7 +75,6 @@ function fit_surface(
     end
     has_proj = any(.!proj_mask)
 
-    # Phase 1a: BIC knot selection
     if nk_time > 0 && nk_freq > 0
         nkx, nky = nk_time, nk_freq
     else
@@ -100,12 +100,10 @@ function fit_surface(
     ky = knot_vector(0.0, 1.0, nky, p)
     Bx, By = bases(kx, ky, p, ξ, η)
 
-    # Phase 1b: Box & Tiao EM robust fitting
     C     = fit_em(Bx, By, Z; λ=λ, β=β, γ=γ, maxiters=em_maxiters, tol=em_tol,
                    forced_zero = has_proj ? .!proj_mask : nothing)
     Z_fit = evaluate(Bx, By, C)
 
-    # Phase 2: threshold residuals
     resid = Z .- Z_fit
 
     col_med = zeros(nx, 1)
@@ -118,7 +116,6 @@ function fit_surface(
     resid_c   = resid .- col_med
     Z_fit_adj = max.(Z_fit .+ col_med, 1e-10)
 
-    # σ and β/γ estimated from cells that pass projection mask
     σ_cells = has_proj ? resid_c[proj_mask] : vec(resid_c)
     σ       = max(1.4826 * median(abs.(σ_cells)), 1e-10)
 
@@ -129,13 +126,39 @@ function fit_surface(
     pg[resid .≤ 0] .= 1.0
     mask = pg .> prob_threshold
 
-    # Phase 3: clean refit on inlier pixels
     clean_mask = has_proj ? mask .& proj_mask : mask
     C_clean = fit_masked(Bx, By, Z, clean_mask; λ=λ)
 
     basis = SplineFlagBasis(p, kx, ky, C_clean, σ, β_fit, γ_fit, prob_threshold, nx, ny)
 
     return Z_fit, mask, basis
+end
+
+function flag_broadband_times_surface(
+    Z        :: AbstractMatrix{<:Real};
+    p        :: Int     = 3,
+    λ        :: Float64 = 1e-6,
+    σ_thresh :: Float64 = 3.0
+) :: BitVector
+    n_t, n_f = size(Z)
+    n_t < 2*(p+1) && return falses(n_t)
+
+    ε  = eps(Float64)
+    ξ  = [clamp(xi, ε, 1-ε) for xi in range(0.0, 1.0, length=n_t)]
+    η  = [clamp(yi, ε, 1-ε) for yi in range(0.0, 1.0, length=n_f)]
+    kx = knot_vector(0.0, 1.0, p+1, p)
+    ky = knot_vector(0.0, 1.0, p+1, p)
+    Bx, By   = bases(kx, ky, p, ξ, η)
+    C        = fit_ls(Bx, By, Z; λ=λ)
+    Z_coarse = evaluate(Bx, By, C)
+
+    resid   = Z .- Z_coarse
+    row_med = [median(view(resid, t, :)) for t in 1:n_t]
+
+    neg_r = row_med[row_med .< 0]
+    σ     = isempty(neg_r) ? max(1.4826 * median(abs.(row_med)), 1e-10) :
+                             max(1.4826 * median(abs.(neg_r)), 1e-10)
+    row_med .> σ_thresh * σ
 end
 
 end
