@@ -1,0 +1,19 @@
+struct SysCal
+    antennaID
+    feedID
+    interval
+    spwID
+    tantFlag
+    tantSpectrum
+    tantTSysFlag
+    tantTSysSpectrum
+    tcalFlag
+    tcalSpectrum
+    time
+    trxFlag
+    trxSpectrum
+    tskyFlag
+    tskySpectrum
+    tsysFlag
+    tsysSpectrum
+end

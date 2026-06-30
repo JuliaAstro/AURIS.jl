@@ -1,0 +1,36 @@
+struct Atmosphere
+    αSpectrum
+    antenna
+    baseband
+    calDataID
+    calReductionID
+    ValidTime # start:stop
+    forwardEffSpectrum
+    forwardEfficiency
+    forwardEfficientyError
+    frequencies
+    frequencySpectrum
+    groundPressure
+    groundHumidity
+    groundTemperature
+    numFreq
+    numLoad
+    numReceptor
+    polTypes
+    powerLoadSpectrum
+    powerSkySpectrum
+    receiverBand
+    sbGain
+    sbGainError
+    syscalType
+    tAtm
+    tAtmSpectrum
+    tRec
+    tRecSpectrum
+    tSys
+    tSysSpectrum
+    τ
+    τSpectrum
+    water
+    waterError
+end
