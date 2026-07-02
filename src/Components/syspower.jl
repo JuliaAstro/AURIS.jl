@@ -7,4 +7,5 @@ struct SysPower
     switchedDiff
     switchedSum
     time
+    raw   
 end

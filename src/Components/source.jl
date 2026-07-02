@@ -13,4 +13,5 @@ struct Source
     sysVel
     time
     transition
+    raw   
 end

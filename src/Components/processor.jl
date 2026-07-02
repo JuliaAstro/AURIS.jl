@@ -4,4 +4,5 @@ struct Processor
     subType
     type
     typeID
+    raw   
 end

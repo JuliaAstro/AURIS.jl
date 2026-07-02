@@ -19,4 +19,5 @@ struct specWindow
     sdmNumBin
     sdmWinFunc
     totBandwidth
+    raw   
 end

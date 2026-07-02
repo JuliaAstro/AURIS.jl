@@ -12,4 +12,5 @@ struct Field
     referenceDirRef
     sourceID
     time
+    raw   
 end

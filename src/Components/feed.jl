@@ -12,4 +12,5 @@ struct Feed
     receptorAngle
     spwID
     time
+    raw   
 end

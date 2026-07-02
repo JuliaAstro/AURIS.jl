@@ -3,7 +3,11 @@ uuid = "991bd463-552e-4456-8203-772a2086edf8"
 authors = ["Paul Barrett", "Paul Tiede", "James McGarry", "Will Golay"]
 version = "1.0.0-DEV"
 
+[deps]
+Mmap = "a63ad114-7e13-5084-954f-fe012c677804"
+
 [compat]
+Mmap = "1"
 julia = "1.6.7"
 
 [extras]

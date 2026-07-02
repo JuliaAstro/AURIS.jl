@@ -3,4 +3,5 @@ struct Polarization
     corrType
     flagRow
     numCorr
+    raw   
 end

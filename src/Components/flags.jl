@@ -7,4 +7,5 @@ struct Flag
     severity
     time
     type
+    raw   
 end

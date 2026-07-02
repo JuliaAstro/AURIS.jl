@@ -6,4 +6,5 @@ struct State
     ref
     sig
     subScan
+    raw   
 end

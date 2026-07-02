@@ -8,14 +8,15 @@ struct Receiver
     sidebandLO
     spectralWindowID
     timeInterval
+    raw 
 end
 
-struct Circular{F} where F<:AbstractFloat
+struct Circular{F<:AbstractFloat}
     L::F
     R::F
 end
 
-struct Linear{F} where F<:AbstractFloat
+struct Linear{F<:AbstractFloat}
     X::F
     Y::F
 end

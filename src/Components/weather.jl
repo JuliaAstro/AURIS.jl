@@ -16,4 +16,5 @@ struct Weather
     windDirectionFlag
     windSpeed
     windSpeedFlag
+    raw
 end
