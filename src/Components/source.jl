@@ -13,4 +13,5 @@ struct Source
     sysVel
     time
     transition
+    raw   # complete original row (lossless catch-all)
 end

@@ -1,13 +1,35 @@
 name = "AURIS"
 uuid = "991bd463-552e-4456-8203-772a2086edf8"
-authors = ["Paul Barrett", "Paul Tiede", "James McGarry", "Will Golay"]
 version = "1.0.0-DEV"
+authors = ["Paul Barrett", "Paul Tiede", "James McGarry", "Will Golay"]
+
+[deps]
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+FITSFiles = "358a0a88-3548-4ad6-b652-8bdbf64af8e5"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Mmap = "a63ad114-7e13-5084-954f-fe012c677804"
+NFFT = "efe261a4-0d2b-5849-be55-fc731d526b0d"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
+SatelliteToolboxTransformations = "6b019ec1-7a1e-4f04-96c7-a9db1ca5514d"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
-julia = "1.6.7"
+Dates = "1"
+FITSFiles = "0.3"
+LinearAlgebra = "1"
+Mmap = "1"
+NFFT = "0.14.3"
+PrecompileTools = "1"
+SatelliteToolboxTransformations = "1"
+StaticArrays = "1"
+Statistics = "1"
+julia = "1.10"
 
 [extras]
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "LinearAlgebra", "Statistics"]

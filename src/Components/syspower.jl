@@ -7,4 +7,5 @@ struct SysPower
     switchedDiff
     switchedSum
     time
+    raw   # complete original row (lossless catch-all)
 end

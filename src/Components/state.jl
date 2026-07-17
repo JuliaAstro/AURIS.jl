@@ -6,4 +6,5 @@ struct State
     ref
     sig
     subScan
+    raw   # complete original row (lossless catch-all)
 end

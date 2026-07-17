@@ -1,8 +1,7 @@
-struct Processor
-    flagRow
-    modeID
-    subType
+struct Station
+    stationID
+    name
+    position
     type
-    typeID
     raw   # complete original row (lossless catch-all)
 end

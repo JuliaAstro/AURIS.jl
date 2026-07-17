@@ -10,4 +10,5 @@ struct CalDevice
     spectralWindowID
     temperatureLoad
     time
+    raw   # complete original row (lossless catch-all)
 end

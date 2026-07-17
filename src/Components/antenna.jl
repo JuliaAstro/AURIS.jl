@@ -1,4 +1,4 @@
-struct Antenna{I,S} where {I<:Integer, S<:AbstractString}
+struct Antenna{I<:Integer, S<:AbstractString}
     number::I
     name::S
     station
@@ -7,4 +7,5 @@ struct Antenna{I,S} where {I<:Integer, S<:AbstractString}
     mount
     type
     area
+    raw   # complete original row (lossless catch-all)
 end

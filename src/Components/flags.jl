@@ -7,4 +7,5 @@ struct Flag
     severity
     time
     type
+    raw   # complete original row (lossless catch-all)
 end

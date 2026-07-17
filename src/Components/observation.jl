@@ -8,4 +8,5 @@ struct Observation
     scheduleType
     telescopeName
     time # start:stop
+    raw   # complete original row (lossless catch-all)
 end

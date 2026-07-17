@@ -16,4 +16,5 @@ struct Weather
     windDirectionFlag
     windSpeed
     windSpeedFlag
+    raw   # complete original row (lossless catch-all)
 end
